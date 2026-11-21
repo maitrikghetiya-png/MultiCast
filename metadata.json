@@ -1,0 +1,6 @@
+{
+  "name": "MultiCast",
+  "description": "MultiCast cross-platform wireless screen-casting application for sharing a source display and audio with up to 9 Windows and Mac receivers (10 devices total) via WebRTC and Socket.IO. Made by Maitrik Ghetiya.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

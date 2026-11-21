@@ -1,0 +1,173 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny all reads and writes by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isVerifiedIdentity() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        (request.auth.token.firebase.sign_in_provider == 'phone' &&
+         request.auth.token.phone_number is string &&
+         request.auth.token.phone_number.size() >= 6)
+      );
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'email',
+          'phoneNumber',
+          'photoURL',
+          'preferredRole',
+          'defaultDeviceName',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string
+        && data.uid == request.auth.uid
+        && data.uid == userId
+        && data.uid.size() >= 1
+        && data.uid.size() <= 128
+        && data.uid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 80
+        && (!('email' in data) || (data.email is string && data.email.size() <= 254))
+        && (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 24 && data.phoneNumber.matches('^\\+[1-9][0-9]{5,18}$')))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1024))
+        && (!('preferredRole' in data) || (data.preferredRole is string && data.preferredRole in ['broadcaster', 'receiver']))
+        && (!('defaultDeviceName' in data) || (data.defaultDeviceName is string && data.defaultDeviceName.size() >= 1 && data.defaultDeviceName.size() <= 64))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRecentRoom(data, userId) {
+      return data.keys().hasAll(['ownerUid', 'code', 'role', 'hostName', 'deviceName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'ownerUid',
+          'code',
+          'role',
+          'hostName',
+          'deviceName',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.ownerUid is string
+        && data.ownerUid == request.auth.uid
+        && data.ownerUid == userId
+        && data.ownerUid.size() >= 1
+        && data.ownerUid.size() <= 128
+        && data.ownerUid.matches('^[a-zA-Z0-9_\\-]+$')
+        && data.code is string
+        && data.code.size() == 6
+        && data.code.matches('^[A-Z0-9]{6}$')
+        && data.role is string
+        && data.role in ['broadcaster', 'receiver']
+        && data.hostName is string
+        && data.hostName.size() >= 1
+        && data.hostName.size() <= 64
+        && data.deviceName is string
+        && data.deviceName.size() >= 1
+        && data.deviceName.size() <= 64
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      // Strictly isolate PII to the owning user; forbid collection enumeration
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isValidId(userId)
+        && isVerifiedIdentity()
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId)
+        && isVerifiedIdentity()
+        && isOwner(userId)
+        && isValidUserProfile(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName',
+          'email',
+          'phoneNumber',
+          'photoURL',
+          'preferredRole',
+          'defaultDeviceName',
+          'updatedAt'
+        ]);
+
+      allow delete: if isValidId(userId) && isOwner(userId);
+
+      match /recentRooms/{roomId} {
+        allow get: if isValidId(userId)
+          && isValidId(roomId)
+          && isOwner(userId)
+          && existing().ownerUid == request.auth.uid;
+
+        allow list: if isOwner(userId)
+          && resource.data.ownerUid == request.auth.uid;
+
+        allow create: if isValidId(userId)
+          && isValidId(roomId)
+          && isVerifiedIdentity()
+          && isOwner(userId)
+          && isValidRecentRoom(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        allow update: if isValidId(userId)
+          && isValidId(roomId)
+          && isVerifiedIdentity()
+          && isOwner(userId)
+          && isValidRecentRoom(incoming(), userId)
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().code == existing().code
+          && incoming().role == existing().role
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'hostName',
+            'deviceName',
+            'updatedAt'
+          ])
+          && exists(/databases/$(database)/documents/users/$(userId));
+
+        allow delete: if isValidId(userId)
+          && isValidId(roomId)
+          && isOwner(userId);
+      }
+    }
+  }
+}

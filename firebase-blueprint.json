@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private user account profile and casting preferences for an authenticated MultiCast user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Authentication user UID matching the document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name shown in the user profile and default device label.",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Optional verified email address.",
+          "maxLength": 254
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Optional E.164 phone number verified via SMS OTP.",
+          "maxLength": 24,
+          "pattern": "^\\+[1-9][0-9]{5,18}$"
+        },
+        "photoURL": {
+          "type": "string",
+          "format": "uri",
+          "description": "Optional profile avatar URL.",
+          "maxLength": 1024
+        },
+        "preferredRole": {
+          "type": "string",
+          "enum": ["broadcaster", "receiver"],
+          "description": "Preferred workspace role."
+        },
+        "defaultDeviceName": {
+          "type": "string",
+          "description": "Saved device label for rooms created or joined.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated."
+        }
+      },
+      "required": ["uid", "displayName", "createdAt", "updatedAt"]
+    },
+    "RecentRoom": {
+      "title": "RecentRoom",
+      "description": "Recent MultiCast room history entry owned by a specific authenticated user (never stores room PINs or tokens).",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "description": "UID of the user who created or joined the room.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "code": {
+          "type": "string",
+          "description": "6-character alphanumeric room code.",
+          "minLength": 6,
+          "maxLength": 6,
+          "pattern": "^[A-Z0-9]{6}$"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["broadcaster", "receiver"],
+          "description": "Role used in that room."
+        },
+        "hostName": {
+          "type": "string",
+          "description": "Broadcaster display device name.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "deviceName": {
+          "type": "string",
+          "description": "This user's device name in that room.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the history record was first saved."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the room was last used."
+        }
+      },
+      "required": ["ownerUid", "code", "role", "hostName", "deviceName", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Private user account profile documents containing PII, accessible strictly by the owning verified user."
+    },
+    "/users/{userId}/recentRooms/{roomId}": {
+      "schema": {
+        "$ref": "#/entities/RecentRoom"
+      },
+      "description": "User-scoped recent rooms subcollection for quick reconnection (excludes PINs and auth tokens)."
+    }
+  }
+}
